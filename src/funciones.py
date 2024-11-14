@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
-
+from scipy.stats import *
+import yfinance as yf
+import matplotlib.pyplot as plt
 
 def valor_presente(FV, r, n):
     """
@@ -172,3 +174,102 @@ def TMensual(Tmort):
 def tmort_filtered(df,edad):
     qx_vec=df[df['x']>=edad]
     return qx_vec
+
+def datos_sesgados(sesgo, cantidad, maximo):
+    #distribucion normal sesgada
+    aleatorios = skewnorm.rvs(sesgo, loc = 2.5, size = cantidad, random_state = 0)
+    aleatorios = aleatorios + abs(aleatorios.min())
+    aleatorios = np.round(aleatorios, 2)/aleatorios.max() * maximo
+    return np.round(aleatorios, 1)
+    
+
+def extrae(ticker, start_date, end_date):
+    """
+    Descarga los precios históricos de un ticker y grafica su precio de cierre.
+
+    Args:
+    ticker (str): El símbolo del ticker (por ejemplo, 'AAPL' para Apple, 'TSLA' para Tesla, 'BTC-CAD' para Bitcoin en CAD).
+    start_date (str): La fecha de inicio en formato 'YYYY-MM-DD'.
+    end_date (str): La fecha de fin en formato 'YYYY-MM-DD'.
+    """
+    # 1. Descargar los precios históricos usando yfinance
+    data = yf.download(ticker, start=start_date, end=end_date)  # Especificamos el rango de fechas
+    #2. Verificar si los datos se descargaron correctamente
+    if data.empty:
+        print(f"No se encontraron datos para el ticker {ticker} en el rango de fechas especificado.")
+        return
+    #3. Aplanar el MultiIndex de las columnas
+    data.columns = [col[0] for col in data.columns]
+    #4. plot
+    data['Adj Close'].plot(title=f"Precio de Cierre de {ticker}", figsize=(10, 6))
+    plt.xlabel("Fecha")
+    plt.ylabel("Precio de Cierre")
+    plt.grid(True)
+    plt.show()
+    return data
+# Funcion que realiza graficos de lineas
+def lineas_multiples(data, title='Gráfico de Múltiples Líneas', xlabel='Eje X', ylabel='Eje Y'):
+    """
+    Función para graficar múltiples líneas con colores aleatorios.
+    
+    Parámetros:
+    - data: DataFrame de pandas con los datos a graficar.
+    - title: Título del gráfico.
+    - xlabel: Etiqueta del eje X.
+    - ylabel: Etiqueta del eje Y.
+    """
+    plt.figure(figsize=(10, 6))  # Tamaño de la figura
+    num_lines = data.shape[1]  # Número de líneas (columnas en el DataFrame)
+    
+    # Generar un color aleatorio para cada línea
+    colors = np.random.rand(num_lines, 3)  # Colores aleatorios en RGB
+
+    for i in range(num_lines):
+        plt.plot(np.arange(1, data.shape[0] + 1), data.iloc[:, i], color=colors[i], label=f'Línea {i + 1}')  # Acceso corregido
+    
+    # Configurar título y etiquetas
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    
+    # Mostrar la cuadrícula
+    plt.grid(True)
+    
+    # Mostrar leyenda
+    #plt.legend()
+    
+    # Mostrar el gráfico
+    plt.show()
+    
+#Procedemos a crear una funcion que modele el proceso estocastico
+def MGB_acciones(data,col_name,steps):
+
+    #Los parametros de la funcion son:
+    #data -> pandas df que contiene los retornos logaritmicos del activo en dias
+    #col_name -> nombre de la columna de los retornos
+    #steps -> numero de pasos hacia adelante en el proceso estocastico
+    data['retornos']=(data['Adj Close'] / data['Adj Close'].shift(1)).apply(lambda x: np.log(x))
+    mu=data['retornos'].mean()
+    sigma = data['retornos'].std()
+    dt=1/len(data) # cantidad dias en muestra--1/152
+    s0=data[col_name].iloc[-1] #Tomamos el ultimo elemento de los precios, ya que este sera el punto de partida
+    et=np.random.normal(loc=0, scale=1, size=steps) # Vector de numeros aletorios de media 0 y desviacion estandar 1
+    euler = np.exp(((mu - (sigma*sigma) / 2) * dt) + sigma * et * np.sqrt(dt))
+
+    st_1=[]
+
+    for i in range(0,steps):
+
+        if i==0:
+            s=s0*euler[0]
+        else:
+            s=st_1[i-1]*euler[i]
+
+        st_1.append(s)
+            
+
+    return st_1
+
+   
+
+    
